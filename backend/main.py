@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
-from gemini_utils import get_summary_and_action_items
+from geminiUtils import get_summary_and_action_items
 
 app = FastAPI()
 
