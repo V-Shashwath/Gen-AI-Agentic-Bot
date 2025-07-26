@@ -67,6 +67,7 @@ The **AI Meeting Agent** is a cutting-edge bot designed to transform chaotic mee
     ASSEMBLYAI_API_KEY="YOUR_ASSEMBLYAI_API_KEY"
     MONGO_DB_URL="mongodb://localhost:27017/" 
     DB_NAME="meeting_analysis_db"
+    SLACK_BOT_TOKEN="xoxb-YOUR_SLACK_BOT_TOKEN"
     ```
 
 7.  **Run the FastAPI Application:**
@@ -330,58 +331,6 @@ Exports the meeting summary and action items to Slack.
 
 -----
 
-**`POST /export/notion`**
-
-Exports the meeting summary and action items to Notion.
-
-  * **Description**: Creates a new page or updates an existing database entry in Notion with the meeting details.
-  * **Request Body**:
-      * `Content-Type: application/json`
-        ```json
-        {
-          "meeting_analysis": { /* MeetingAnalysisResult object */ },
-          "notion_database_id": "your-notion-database-id",
-          "notion_page_title": "Q3 Planning Meeting Summary",
-          "parent_page_id": "optional-parent-page-id"
-        }
-        ```
-      * **Properties**:
-          * `meeting_analysis`: (type: object, required) The `MeetingAnalysisResult` object.
-          * `notion_database_id`: (type: string, required) The ID of the Notion database to add the entry to.
-          * `notion_page_title`: (type: string, required) The title for the new Notion page.
-          * `parent_page_id`: (type: string, optional) If the new page should be a sub-page of an existing one.
-  * **Responses**:
-      * **`200 OK`**: Content exported to Notion.
-      * **`400 Bad Request`**: Missing data or invalid Notion ID.
-      * **`500 Internal Server Error`**: Error communicating with Notion API.
-
------
-
-**`POST /export/trello`**
-
-Exports action items as cards to a Trello board.
-
-  * **Description**: Creates new cards on a specified Trello list for each action item.
-  * **Request Body**:
-      * `Content-Type: application/json`
-        ```json
-        {
-          "meeting_analysis": { /* MeetingAnalysisResult object */ },
-          "trello_board_id": "your-trello-board-id",
-          "trello_list_id": "your-trello-list-id"
-        }
-        ```
-      * **Properties**:
-          * `meeting_analysis`: (type: object, required) The `MeetingAnalysisResult` object.
-          * `trello_board_id`: (type: string, required) The ID of the Trello board.
-          * `trello_list_id`: (type: string, required) The ID of the list within the board to add cards to.
-  * **Responses**:
-      * **`200 OK`**: Cards created in Trello.
-      * **`400 Bad Request`**: Missing data or invalid Trello IDs.
-      * **`500 Internal Server Error`**: Error communicating with Trello API.
-
------
-
 ### Implemented Endpoints in Current Backend Code
 
 As of the current backend code, the following primary endpoints are implemented for meeting analysis:
@@ -407,5 +356,9 @@ As of the current backend code, the following primary endpoints are implemented 
 
       * **Accepts**: A `meeting_id` as a path parameter.
       * **Functionality**: Retrieves a specific meeting analysis result by its unique ID from MongoDB.
+
+  * **`POST /export/slack`**:
+    * **Accepts**: A `MeetingAnalysisResult` object and a `slack_channel_id`.
+    * **Functionality**: Formats the meeting summary and action items and sends them to the specified Slack channel.
 
 -----

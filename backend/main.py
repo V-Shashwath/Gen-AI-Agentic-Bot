@@ -8,6 +8,8 @@ import uuid
 from geminiUtils import get_summary_and_action_items
 from transcriptionUtils import transcribe_audio
 
+from slack_integration import send_slack_message, format_meeting_analysis_for_slack
+
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
@@ -42,6 +44,11 @@ class MeetingAnalysisResult(BaseModel):
 client: AsyncIOMotorClient = None
 database = None
 meetings_collection = None
+
+class SlackExportRequest(BaseModel):
+    meeting_analysis: MeetingAnalysisResult = Field(..., description="The MeetingAnalysisResult object to be exported.")
+    slack_channel_id: str = Field(..., description="The ID of the Slack channel or user to send the message to.")
+    export_format: str = Field("summary_and_tasks", description="Specifies what content to export.", enum=["summary_only", "tasks_only", "summary_and_tasks"])
 
 # --- Application Lifecycle Events ---
 
@@ -217,3 +224,26 @@ async def get_meeting_by_id(meeting_id: str):
         return MeetingAnalysisResult(**meeting_doc)
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    
+    
+# --- Integration Endpoints ---
+
+@app.post("/export/slack", summary="Export meeting analysis to Slack")
+async def export_to_slack(request: SlackExportRequest):
+    """
+    Exports the meeting summary and action items to a specified Slack channel.
+    """
+    message_text = format_meeting_analysis_for_slack(
+        request.meeting_analysis.model_dump(),
+        request.export_format
+    )
+
+    slack_response = await send_slack_message(
+        channel_id=request.slack_channel_id,
+        message_text=message_text
+    )
+
+    if "error" in slack_response:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=slack_response["error"])
+
+    return {"message": "Content successfully exported to Slack.", "slack_response": slack_response}
