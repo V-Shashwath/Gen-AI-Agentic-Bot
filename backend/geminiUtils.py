@@ -1,33 +1,24 @@
+import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-genai.configure(api_key=api_key)
+model = genai.GenerativeModel("gemini-pro")
 
-def generate_summary(transcript):
-    try:
-        model = genai.GenerativeModel("gemini-pro")  # ✅ No `models/` or v1beta
-
-        prompt = f"""
-        You are an AI meeting assistant.
-        Given the following meeting transcript:
-
-        ====
-        {transcript}
-        ====
-
-        1. Provide a concise summary.
-        2. Extract clear action items.
-        3. Format output clearly for sharing.
-
-        """
-
-        response = model.generate_content(prompt)
-        return response.text
-
-    except Exception as e:
-        print("🔥 Gemini API failed:", repr(e))
-        return "Gemini error"
+def get_summary_and_action_items(transcript_text):
+    prompt = f"""
+    You are a meeting assistant. Given the meeting transcript below:
+    
+    {transcript_text}
+    
+    1. Summarize the meeting in human-readable format.
+    2. Extract action items with:
+        - Task
+        - Assignee (if mentioned)
+        - Deadline (infer if possible)
+    Return in a structured format (like JSON or Markdown).
+    """
+    response = model.generate_content(prompt)
+    return response.text
