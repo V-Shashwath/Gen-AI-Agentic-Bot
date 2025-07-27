@@ -9,7 +9,7 @@ load_dotenv()
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
-async def send_slack_message(channel_id: str, message_text: str) -> Dict[str, Any]:
+def send_slack_message(channel_id: str, message_text: str) -> Dict[str, Any]:
     """
     Sends a message to a specified Slack channel.
     """
@@ -18,7 +18,7 @@ async def send_slack_message(channel_id: str, message_text: str) -> Dict[str, An
         return {"error": "Slack bot token is not configured."}
 
     try:
-        response = await slack_client.chat_postMessage(
+        response = slack_client.chat_postMessage(
             channel=channel_id,
             text=message_text,
             mrkdwn=True
@@ -33,37 +33,75 @@ async def send_slack_message(channel_id: str, message_text: str) -> Dict[str, An
         return {"error": f"Failed to send Slack message: {e}"}
 
 def format_meeting_analysis_for_slack(meeting_analysis: Dict[str, Any], export_format: str) -> str:
-    """
-    Formats the meeting analysis result into a Slack-friendly Markdown string.
-    """
-    formatted_message = []
+    sections = []
 
+    # Header with basic identifiers
+    sections.append(f"*🆔 Meeting ID:* `{meeting_analysis.get('meeting_id', 'N/A')}`")
+    sections.append(f"*📅 Date & Time:* {meeting_analysis.get('timestamp', 'N/A')}`")
+    sections.append("")
+
+    # Summary Section
     if export_format in ["summary_only", "summary_and_tasks"]:
-        formatted_message.append(f"*Meeting Summary for {meeting_analysis.get('meeting_id', 'Unknown Meeting')}*")
-        formatted_message.append(f"_{meeting_analysis.get('timestamp', 'N/A')}_")
-        formatted_message.append(f"\n>{meeting_analysis.get('summary', 'No summary available.')}\n")
+        summary = meeting_analysis.get("summary", "No summary was generated.")
+        sections.append("*📝 Meeting Summary:*")
+        sections.append(f"> {summary.strip()}")
+        sections.append("")
 
+    # Action Items Section
     if export_format in ["tasks_only", "summary_and_tasks"]:
         action_items = meeting_analysis.get('action_items', [])
         if action_items:
-            formatted_message.append("*Action Items:*")
-            for item in action_items:
+            sections.append("*🧩 Action Items:*")
+            for idx, item in enumerate(action_items, start=1):
                 task = item.get('task', 'N/A')
                 assignee = item.get('assignee', 'Unassigned')
-                deadline = item.get('deadline', 'No Deadline')
+                deadline = item.get('deadline', 'No deadline specified')
                 status = item.get('status', 'new')
-                formatted_message.append(f"• *Task:* {task}\n  • *Assignee:* {assignee}\n  • *Deadline:* {deadline}\n  • *Status:* {status}")
+                sections.append(
+                    f"{idx}. *Task:* {task}\n"
+                    f"   • *Assigned To:* {assignee}\n"
+                    f"   • *Deadline:* {deadline}\n"
+                    f"   • *Status:* {status.capitalize()}"
+                )
+            sections.append("")
         else:
-            if export_format == "tasks_only":
-                formatted_message.append("No action items identified.")
+            sections.append("_There are no actionable tasks identified in this meeting._")
+            sections.append("")
 
-    key_decisions = meeting_analysis.get('key_decisions', [])
-    if key_decisions and export_format == "summary_and_tasks": 
-        formatted_message.append("\n*Key Decisions:*")
-        for decision in key_decisions:
-            desc = decision.get('description', 'N/A')
-            parts = ", ".join(decision.get('participants_involved', [])) or "N/A"
-            date = decision.get('date_made', 'N/A')
-            formatted_message.append(f"• {desc} (Participants: {parts}, Date: {date})")
+    # Key Decisions Section
+    if export_format == "summary_and_tasks":
+        key_decisions = meeting_analysis.get('key_decisions', [])
+        if key_decisions:
+            sections.append("*📌 Key Decisions:*")
+            for decision in key_decisions:
+                desc = decision.get('description', 'N/A')
+                participants = ", ".join(decision.get('participants_involved', [])) or "N/A"
+                date = decision.get('date_made', 'N/A')
+                sections.append(
+                    f"*Decision:* {desc}\n"
+                    f"   • *Participants Involved:* {participants}\n"
+                    f"   • *Date:* {date}"
+                )
+            sections.append("")
+        else:
+            sections.append("_No significant decisions were recorded during the meeting._")
+            sections.append("")
 
-    return "\n".join(formatted_message)
+    # Contextual Intelligence Section
+    tone = meeting_analysis.get("tone_overview")
+    topics = meeting_analysis.get("important_topics")
+    speakers = meeting_analysis.get("speakers_detected")
+
+    if any([tone, topics, speakers]):
+        sections.append("*🧠 Additional Context:*")
+        if speakers:
+            sections.append(f"• *Speakers Identified:* {', '.join(speakers)}")
+        if tone:
+            sections.append(f"• *Overall Tone:* {tone}")
+        if topics:
+            sections.append(f"• *Main Topics Discussed:* {', '.join(topics)}")
+        sections.append("")
+
+    sections.append("_Generated by your AI Meeting Assistant_")
+
+    return "\n".join(sections)

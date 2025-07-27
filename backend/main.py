@@ -1,5 +1,8 @@
+from datetime import datetime, timezone
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from pydantic import BaseModel
+from grpc import Status
+from fastapi import status 
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import aiofiles
 import os
@@ -9,6 +12,11 @@ from geminiUtils import get_summary_and_action_items
 from transcriptionUtils import transcribe_audio
 
 from slack_integration import send_slack_message, format_meeting_analysis_for_slack
+
+from email_integration import send_meeting_email, format_meeting_analysis_for_email
+from notion_integration import create_meeting_page
+
+from notion_integration import create_meeting_page
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -40,6 +48,11 @@ class MeetingAnalysisResult(BaseModel):
     key_decisions: List[KeyDecision]
     raw_transcript_preview: Optional[str] = None
     full_transcript_path: Optional[str] = None
+    
+     # 🔍 Smart context metadata (optional but powerful)
+    speakers_detected: Optional[List[str]] = None  
+    tone_overview: Optional[str] = None          
+    important_topics: Optional[List[str]] = None  
 
 client: AsyncIOMotorClient = None
 database = None
@@ -115,7 +128,10 @@ async def analyze_transcript(file: UploadFile = File(..., description="Text file
         summary=analysis_result.get("summary", "No summary could be generated."),
         action_items=[ActionItem(**item) for item in analysis_result.get("action_items", [])],
         key_decisions=[KeyDecision(**item) for item in analysis_result.get("key_decisions", [])],
-        raw_transcript_preview=transcript[:500] + "..." if len(transcript) > 500 else transcript
+        raw_transcript_preview=transcript[:500] + "..." if len(transcript) > 500 else transcript,
+        speakers_detected=analysis_result.get("speakers_detected"),
+        tone_overview=analysis_result.get("tone_overview"),
+        important_topics=analysis_result.get("important_topics")
     )
 
 
@@ -126,9 +142,14 @@ async def transcribe_and_analyze(
 ):
     """
     Accepts an audio or video file, transcribes it using AssemblyAI,
-    then processes the transcript using Gemini to generate a summary,
-    action items, and key decisions. The results are stored persistently.
+    then analyzes the transcript using Gemini with smart context awareness to extract:
+    - Meeting summary (with tone & urgency)
+    - Action items (with inferred deadlines & assignees)
+    - Key decisions (with decision date & involved speakers)
+
+    The results are stored persistently in MongoDB.
     """
+
     # Validate file type 
     allowed_content_types = ["audio/", "video/"]
     if not any(file.content_type.startswith(t) for t in allowed_content_types):
@@ -139,7 +160,10 @@ async def transcribe_and_analyze(
 
     # Save the uploaded file temporarily
     unique_filename = f"{uuid.uuid4()}_{file.filename}"
-    temp_file_path = f"/tmp/{unique_filename}"
+    # Before saving the file
+    os.makedirs("temp", exist_ok=True)  # Ensure temp directory exists
+    temp_file_path = os.path.join("temp", unique_filename)
+    # temp_file_path = f"/tmp/{unique_filename}"
 
     try:
         async with aiofiles.open(temp_file_path, 'wb') as out_file:
@@ -160,7 +184,7 @@ async def transcribe_and_analyze(
         analysis_result_data = get_summary_and_action_items(raw_transcript_text)
 
         if "error" in analysis_result_data:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=analysis_result_data["error"])
+            raise HTTPException(status_code=Status.HTTP_500_INTERNAL_SERVER_ERROR, detail=analysis_result_data["error"])
 
         # Construct the MeetingAnalysisResult Pydantic model instance
         meeting_id = str(uuid.uuid4())
@@ -177,8 +201,12 @@ async def transcribe_and_analyze(
             action_items=action_items_list,
             key_decisions=key_decisions_list,
             raw_transcript_preview=raw_transcript_text[:500] + "..." if len(raw_transcript_text) > 500 else raw_transcript_text,
-            full_transcript_path=temp_file_path 
+            full_transcript_path=temp_file_path,
+            speakers_detected=analysis_result_data.get("speakers_detected"),
+            tone_overview=analysis_result_data.get("tone_overview"),
+            important_topics=analysis_result_data.get("important_topics")
         )
+
 
         # Store the analysis result in MongoDB
         await meetings_collection.insert_one(meeting_analysis_object.model_dump(by_alias=True))
@@ -229,7 +257,7 @@ async def get_meeting_by_id(meeting_id: str):
 # --- Integration Endpoints ---
 
 @app.post("/export/slack", summary="Export meeting analysis to Slack")
-async def export_to_slack(request: SlackExportRequest):
+def export_to_slack(request: SlackExportRequest):
     """
     Exports the meeting summary and action items to a specified Slack channel.
     """
@@ -238,7 +266,7 @@ async def export_to_slack(request: SlackExportRequest):
         request.export_format
     )
 
-    slack_response = await send_slack_message(
+    slack_response = send_slack_message(
         channel_id=request.slack_channel_id,
         message_text=message_text
     )
@@ -247,3 +275,18 @@ async def export_to_slack(request: SlackExportRequest):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=slack_response["error"])
 
     return {"message": "Content successfully exported to Slack.", "slack_response": slack_response}
+
+@app.post("/export/email", summary="Export meeting analysis via Email")
+async def export_to_email(recipient: str, meeting_analysis: MeetingAnalysisResult):
+    body = format_meeting_analysis_for_email(meeting_analysis.model_dump())
+    send_meeting_email(recipient, subject="Meeting Summary", body=body)
+    return {"message": "Email sent successfully"}
+
+
+@app.post("/export/notion", summary="Export meeting analysis to Notion")
+async def export_to_notion(meeting_analysis: MeetingAnalysisResult):
+    try:
+        create_meeting_page(os.getenv("NOTION_DB_ID"), meeting_analysis.model_dump())
+        return {"message": "Meeting data pushed to Notion"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

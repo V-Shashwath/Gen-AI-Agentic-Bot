@@ -1,0 +1,15 @@
+[John]: Good morning, everyone. Let's begin by reviewing last week's action items.
+[Alice]: I completed the onboarding flow redesign, and it's ready for QA.
+[Sam]: I'm still working on the API integration. I’ll need until Friday to wrap it up.
+[John]: Okay, Sam. Please prioritize that and make sure it's done before the next call.
+
+[Alice]: Also, just a heads-up—marketing wants the landing page changes live by end of week.
+[Sam]: Got it. I’ll push that after finishing the API.
+
+[John]: Regarding the budget review, we decided to reduce spend on paid ads by 15%.
+[Emily]: I’ll update the finance sheet accordingly.
+
+[Alice]: Can we assign someone to explore switching our analytics provider?
+[Sam]: I can do that next week.
+
+[John]: Great. So, action items: Sam to finish API and explore analytics switch; Emily to update finance sheet. Let's regroup Monday.

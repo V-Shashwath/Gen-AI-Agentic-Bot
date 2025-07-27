@@ -1,67 +1,86 @@
 import google.generativeai as genai
 import os
+import json
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
-
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.0-flash")  # or gemini-pro
 
-def get_summary_and_action_items(transcript_text: str) -> str:
+def get_summary_and_action_items(transcript_text: str):
     if not transcript_text:
         return {"error": "No transcript text provided for summarization."}
-    
+
     response_schema = {
         "type": "OBJECT",
         "properties": {
-            "summary": {"type": "STRING", "description": "Concise summary of the meeting."},
+            "summary": {"type": "STRING"},
             "action_items": {
                 "type": "ARRAY",
-                "description": "List of actionable tasks from the meeting.",
                 "items": {
                     "type": "OBJECT",
                     "properties": {
-                        "task": {"type": "STRING", "description": "Clear description of the task."},
-                        "assignee": {"type": "STRING", "nullable": True, "description": "Person or team responsible, or 'Unassigned'."},
-                        "deadline": {"type": "STRING", "nullable": True, "description": "Stated or inferred deadline (e.g., YYYY-MM-DD, 'ASAP', 'Next Week')."},
-                        "status": {"type": "STRING", "enum": ["new", "in-progress", "completed"], "default": "new", "description": "Current status of the action item."}
+                        "task": {"type": "STRING"},
+                        "assignee": {"type": "STRING"},
+                        "deadline": {"type": "STRING"},
+                        "status": {"type": "STRING", "enum": ["new", "in-progress", "completed"]}
                     },
-                    "required": ["task", "status"] 
+                    "required": ["task", "status"]
                 }
             },
             "key_decisions": {
                 "type": "ARRAY",
-                "description": "List of key decisions made during the meeting.",
                 "items": {
                     "type": "OBJECT",
                     "properties": {
-                        "description": {"type": "STRING", "description": "Description of the key decision."},
-                        "participants_involved": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "List of participants involved in the decision."},
-                        "date_made": {"type": "STRING", "description": "Date the decision was made (YYYY-MM-DD)."}
+                        "description": {"type": "STRING"},
+                        "participants_involved": {"type": "ARRAY", "items": {"type": "STRING"}},
+                        "date_made": {"type": "STRING"}
                     },
                     "required": ["description", "date_made"]
                 }
+            },
+            "speakers_detected": {
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
+                "description": "Names or identifiers of speakers who contributed"
+            },
+            "tone_overview": {
+                "type": "STRING",
+                "description": "Overall tone or sentiment of the meeting"
+            },
+            "important_topics": {
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
+                "description": "Major themes or topics discussed"
             }
         },
         "required": ["summary", "action_items", "key_decisions"]
     }
 
+
     prompt = f"""
-    You are an expert meeting assistant tasked with summarizing discussions, identifying actionable tasks, and extracting key decisions.
-    Given the following meeting transcript, please perform the following tasks and output the result as a JSON object strictly following the provided schema:
+    You are an advanced meeting assistant with smart context awareness.
 
-    1.  Generate a concise and human-readable summary of the key discussions, decisions, and outcomes from the meeting. The summary should capture the essence of the conversation without unnecessary details.
-
-    2.  Extract all action items mentioned or implied in the transcript. For each action item, provide the 'task', 'assignee' (infer if not explicit, or 'Unassigned'), 'deadline' (infer if not explicit, or 'No Deadline'), and 'status' (default to 'new').
-
-    3.  Extract all key decisions made during the meeting. For each decision, provide a 'description', 'participants_involved' (list of names), and the 'date_made' (infer if not explicit, or use the current date if no specific date is mentioned in the transcript).
-
+    TRANSCRIPT:
     ---
-    ## Meeting Transcript:
     {transcript_text}
     ---
+
+    Instructions:
+    1. Provide a concise summary.
+    2. Extract all action items (task, assignee, deadline, status).
+    3. Extract key decisions (description, participants involved, date).
+    4. Detect and list all speakers.
+    5. Provide a high-level tone overview (e.g., optimistic, tense, goal-oriented).
+    6. Identify 3-5 important topics discussed.
+
+    Make sure to return valid JSON following this schema exactly.
+    Avoid hallucinations and use only transcript data.
     """
-    
+
+
     try:
         response = model.generate_content(
             prompt,
@@ -72,15 +91,18 @@ def get_summary_and_action_items(transcript_text: str) -> str:
         )
 
         if not response or not response.text:
-            return {"error": "The model did not return a valid response."}
+            print("❌ No response text from Gemini.")
+            return {"error": "Empty response from Gemini"}
 
+        print("✅ Raw response from Gemini:\n", response.text)
         parsed_json = json.loads(response.text)
         return parsed_json
 
     except json.JSONDecodeError as e:
-        print(f"JSON parsing error from model response: {e}")
-        print(f"Raw model response text: {response.text}")
-        return {"error": f"Failed to parse JSON response from model: {e}"}
+        print("❌ JSON Decode Error:", e)
+        print("🔍 Response text that failed:\n", response.text)
+        return {"error": f"Invalid JSON format from Gemini: {e}"}
+
     except Exception as e:
-        print(f"An unexpected error occurred during content generation: {e}")
-        return {"error": f"Could not generate summary and action items: {e}. Please try again later."}
+        print("🔥 General Gemini Error:", e)
+        return {"error": f"Could not generate summary and action items: {e}"}
