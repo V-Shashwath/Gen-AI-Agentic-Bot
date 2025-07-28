@@ -172,7 +172,7 @@ const ExportOptions = ({ meetingAnalysis, setError }) => {
                 if (!slackChannel) {
                     throw new Error("Slack Channel ID is required.");
                 }
-                url = 'http://localhost:8000/export/slack';
+                url = '/export/slack';
                 payload = {
                     meeting_analysis: meetingAnalysis,
                     slack_channel_id: slackChannel,
@@ -182,7 +182,7 @@ const ExportOptions = ({ meetingAnalysis, setError }) => {
                 if (!emailRecipient) {
                     throw new Error("Email Recipient is required.");
                 }
-                url = `http://localhost:8000/export/email?recipient=${encodeURIComponent(emailRecipient)}`;
+                url = `/export/email?recipient=${encodeURIComponent(emailRecipient)}`;
                 payload = meetingAnalysis;
             }  else {
                 throw new Error("Invalid export type.");
@@ -355,8 +355,8 @@ const App = () => {
 
         // Choose correct endpoint
         const endpoint = isTextFile
-            ? 'http://localhost:8000/analyze/'
-            : 'http://localhost:8000/transcribe-and-analyze/';
+            ? '/analyze/'
+            : '/transcribe-and-analyze/';
 
         try {
             const response = await fetch(endpoint, {
