@@ -347,14 +347,13 @@ async def export_to_notion(meeting_analysis: MeetingAnalysisResult):
         return {"message": "Meeting data pushed to Notion"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
 
+
+
+import os
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
-# Serve React build files
-# app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    return FileResponse("frontend/build/index.html")
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="static")
