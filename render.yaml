@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: gen-ai-agentic-bot
+    env: python
+    buildCommand: |
+      pip install -r requirements.txt
+      cd frontend && npm install && npm run build
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: NODE_VERSION
+        value: 18
+      - key: BACKEND_PORT
+        value: 10000
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      - key: MONGO_DB_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+    staticPublishPath: frontend/build
+    autoDeploy: true
