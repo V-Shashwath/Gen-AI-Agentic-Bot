@@ -21,12 +21,22 @@ from notion_integration import create_meeting_page
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
+from fastapi.middleware.cors import CORSMiddleware
+
 load_dotenv()
 
 app = FastAPI(
     title="Meeting Analysis API",
     description="API for transcribing audio/video meetings and analyzing them to extract summaries, action items, and key decisions.",
     version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class ActionItem(BaseModel):
