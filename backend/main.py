@@ -28,9 +28,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
+origins = [
+    "https://gen-ai-agentic-bot.onrender.com",  # ✅ frontend deployed URL
+    "http://localhost:5173"  # ✅ local dev
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -349,7 +353,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # Serve React build files
-app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
+# app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
 
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
