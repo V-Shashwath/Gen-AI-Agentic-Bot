@@ -15,8 +15,6 @@ from slack_integration import send_slack_message, format_meeting_analysis_for_sl
 
 from email_integration import send_meeting_email, format_meeting_analysis_for_email
 
-from ragUtils import create_and_store_embeddings_simple, query_rag_simple
-
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
