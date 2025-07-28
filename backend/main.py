@@ -14,9 +14,8 @@ from transcriptionUtils import transcribe_audio
 from slack_integration import send_slack_message, format_meeting_analysis_for_slack
 
 from email_integration import send_meeting_email, format_meeting_analysis_for_email
-from notion_integration import create_meeting_page
 
-from notion_integration import create_meeting_page
+from ragUtils import create_and_store_embeddings_simple, query_rag_simple
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -58,11 +57,18 @@ class MeetingAnalysisResult(BaseModel):
     key_decisions: List[KeyDecision]
     raw_transcript_preview: Optional[str] = None
     full_transcript_path: Optional[str] = None
-    
-     # 🔍 Smart context metadata (optional but powerful)
+
     speakers_detected: Optional[List[str]] = None  
     tone_overview: Optional[str] = None          
     important_topics: Optional[List[str]] = None  
+
+class RAGQuery(BaseModel):
+    query: str = Field(..., description="The natural language query for the RAG system.")
+    meeting_id: Optional[str] = Field(None, description="Optional: Filter query to a specific meeting ID. (Currently global search)")
+
+class RAGResponse(BaseModel):
+    answer: str
+    source_documents: List[dict]
 
 client: AsyncIOMotorClient = None
 database = None
@@ -131,8 +137,8 @@ async def analyze_transcript(file: UploadFile = File(..., description="Text file
 
     meeting_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
-
-    return MeetingAnalysisResult(
+    
+    meeting_analysis_object = MeetingAnalysisResult(
         meeting_id=meeting_id,
         timestamp=timestamp,
         summary=analysis_result.get("summary", "No summary could be generated."),
@@ -143,7 +149,15 @@ async def analyze_transcript(file: UploadFile = File(..., description="Text file
         tone_overview=analysis_result.get("tone_overview"),
         important_topics=analysis_result.get("important_topics")
     )
+    
+    # rag_metadata = meeting_analysis_object.model_dump(exclude={"raw_transcript_preview"})
+    # await create_and_store_embeddings_simple(
+    #     meeting_id=meeting_analysis_object.meeting_id,
+    #     full_text_content=transcript,
+    #     metadata=rag_metadata
+    # )
 
+    return meeting_analysis_object
 
 @app.post("/transcribe-and-analyze/", response_model=MeetingAnalysisResult, summary="Transcribe Audio/Video and Analyze Meeting")
 async def transcribe_and_analyze(
@@ -216,7 +230,13 @@ async def transcribe_and_analyze(
             tone_overview=analysis_result_data.get("tone_overview"),
             important_topics=analysis_result_data.get("important_topics")
         )
-
+        
+        # rag_metadata = meeting_analysis_object.model_dump(exclude={"raw_transcript_preview", "full_transcript_path"})
+        # await create_and_store_embeddings_simple(
+        #     meeting_id=meeting_analysis_object.meeting_id,
+        #     full_text_content=raw_transcript_text, 
+        #     metadata=rag_metadata
+        # )
 
         # Store the analysis result in MongoDB
         await meetings_collection.insert_one(meeting_analysis_object.model_dump(by_alias=True))
@@ -236,7 +256,32 @@ async def transcribe_and_analyze(
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             print(f"Cleaned up temporary file: {temp_file_path}")
-            
+
+@app.post("/query-rag/", response_model=RAGResponse, summary="Query the RAG system for meeting insights")
+async def query_meeting_insights(rag_query: RAGQuery):
+    """
+    Queries the RAG system to get answers to questions about meetings,
+    leveraging indexed transcripts, summaries, action items, and external documents.
+    """
+    try:
+        result = await query_rag_simple(rag_query.query, rag_query.meeting_id)
+
+        formatted_sources = []
+        if result.get("source_documents"):
+            for doc in result["source_documents"]:
+                formatted_sources.append({
+                    "page_content_preview": doc.page_content[:200] + "...",
+                    "metadata": doc.metadata
+                })
+
+        return RAGResponse(
+            answer=result.get("result", "Could not find a relevant answer."),
+            source_documents=formatted_sources
+        )
+    except Exception as e:
+        print(f"Error during RAG query: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error querying RAG: {e}")
+
 
 @app.get("/meetings/", response_model=List[MeetingAnalysisResult], summary="Get all meeting analysis results")
 async def get_all_meetings():
