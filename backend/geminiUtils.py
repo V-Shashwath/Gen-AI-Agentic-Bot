@@ -6,7 +6,7 @@ from datetime import datetime
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.0-flash")  # or gemini-pro
+model = genai.GenerativeModel("gemini-2.5-flash")  # or gemini-pro
 
 def get_summary_and_action_items(transcript_text: str):
     if not transcript_text:
